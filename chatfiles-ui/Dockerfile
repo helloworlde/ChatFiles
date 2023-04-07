@@ -1,29 +1,42 @@
-# ---- Base Node ----
 FROM node:19-alpine AS base
+
+FROM base AS deps
+# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
-COPY package*.json ./
 
-# ---- Dependencies ----
-FROM base AS dependencies
-RUN npm ci
+COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+RUN \
+  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
+  elif [ -f package-lock.json ]; then npm ci; \
+  elif [ -f pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile; \
+  else echo "Lockfile not found." && exit 1; \
+  fi
 
-# ---- Build ----
-FROM dependencies AS build
+
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
 
-# ---- Production ----
-FROM node:19-alpine AS production
+RUN yarn build
+
+# Production image, copy all the files and run next
+FROM base AS runner
 WORKDIR /app
-COPY --from=dependencies /app/node_modules ./node_modules
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/public ./public
-COPY --from=build /app/package*.json ./
-COPY --from=build /app/next.config.js ./next.config.js
-COPY --from=build /app/next-i18next.config.js ./next-i18next.config.js
 
-# Expose the port the app will run on
+ENV NODE_ENV production
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
 EXPOSE 3000
+ENV PORT 3000
 
-# Start the application
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
