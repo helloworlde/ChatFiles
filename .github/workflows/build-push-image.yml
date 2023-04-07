@@ -31,7 +31,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           context: ./chatfiles/
           push: true
-          tags: guangzhengli/chatfiles:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/chatfiles:latest
           file: ./chatfiles/Dockerfile
       -
         name: Build and push chatfiles-ui image
@@ -40,5 +40,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           context: ./chatfiles-ui/
           push: true
-          tags: guangzhengli/chatfiles-ui:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/chatfiles-ui:latest
           file: ./chatfiles-ui/Dockerfile
